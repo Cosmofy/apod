@@ -10,7 +10,7 @@ Group=ubuntu
 WorkingDirectory=/home/ubuntu/services/apod
 EnvironmentFile=/home/ubuntu/services/apod/.env
 Environment=PYTHONDONTWRITEBYTECODE=1
-ExecStart=/home/ubuntu/services/apod/.venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 29401 --workers 1 --proxy-headers --forwarded-allow-ips=127.0.0.1
+ExecStart=/home/ubuntu/services/apod/.venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 29401 --workers 1 --proxy-headers --forwarded-allow-ips=127.0.0.1 --no-access-log
 Restart=on-failure
 RestartSec=5
 TimeoutStopSec=30

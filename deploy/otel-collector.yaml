@@ -25,6 +25,12 @@ processors:
     check_interval: 1s
     limit_mib: 128
     spike_limit_mib: 32
+  transform/apod_logs:
+    error_mode: ignore
+    log_statements:
+      - context: log
+        statements:
+          - set(log.body, log.body["MESSAGE"]) where IsMap(log.body) and log.body["MESSAGE"] != nil
   resource/apod:
     attributes:
       - key: service.name
@@ -88,6 +94,7 @@ service:
         - journald/apod
       processors:
         - memory_limiter
+        - transform/apod_logs
         - resource/apod
         - batch
       exporters:
