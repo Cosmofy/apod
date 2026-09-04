@@ -1,25 +1,53 @@
+from contextlib import asynccontextmanager
+import httpx
 from fastapi import FastAPI
-from app.errors import register_error_handler
+import redis.asyncio as redis
 
-app = FastAPI()
+from app.errors import Error, handle_error
+from app.config import Settings
+from app.observability import configure_logging, log_requests
+from app.routers import apod, health, vector
 
-register_error_handler(app)
+OPENAPI_TAGS = [
+    {
+        "name": "health",
+        "description": "Check whether the APOD service and its dependencies are available.",
+    },
+    {
+        "name": "apod",
+        "description": "Retrieve NASA's Astronomy Picture of the Day by date.",
+    },
+    {
+        "name": "vector",
+        "description": "Search historical Astronomy Pictures of the Day using vector similarity.",
+    },
+]
 
-# to be removed
-@app.get("/")
-async def root():
-    return {"message": "Hello World"}
+configure_logging()
 
-@app.get("/health/live")
-async def health_live() -> dict[str, str]:
-    return {"status": "ok"}
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    async with (httpx.AsyncClient(timeout=httpx.Timeout(10.0, connect=3.0)) as http_client, redis.from_url(Settings().redis_url) as redis_client):
+        app.state.http_client = http_client
+        app.state.redis_client = redis_client
+        yield
+        print("should never print - app is stopped at this point")
 
 
-# get picture by date (default = today, otherwise has data argument)
-@app.get("/apod")
-async def get_apod(get_picture):
-    # check redis cache
-    # check database
-    # check nasa api
-
-    # get picture by keywords (has to search vector database)
+# app creation and startup
+app = FastAPI(
+    lifespan=lifespan, # opens shared clients at startup and closes them at shutdown
+    title="Cosmofy APOD API",
+    summary="Retrieve and store NASA's Astronomy Picture of the Day.", # short explanation displayed near the API title
+    description="Provides exact-date APOD retrieval with Redis caching and Turso persistence.", # longer explanation displayed on the documentation page
+    version="1.0.0",
+    openapi_tags=OPENAPI_TAGS, # describes and orders endpoint groups in the documentation
+    terms_of_service="https://github.com/Cosmofy/apod",
+    contact={"name": "Cosmofy", "url": "https://github.com/Cosmofy"},
+    license_info={"name": "Proprietary"},
+)
+app.middleware("http")(log_requests)
+app.add_exception_handler(Error, handle_error)
+app.include_router(health.router)
+app.include_router(apod.router)
+app.include_router(vector.router)

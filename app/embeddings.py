@@ -1,7 +1,13 @@
 import re
+import sys
+from array import array
 from html import unescape
 from openai import OpenAI
 from app.config import Settings
+from app.source import SourceApod
+
+
+EMBEDDING_DIMENSIONS = 3072
 
 def clean_text(value: str | None) -> str:
     text = re.compile(r"<[^>]+>").sub(" ", value or "")
@@ -28,3 +34,19 @@ def create_embeddings(texts: list[str]) -> list[list[float]]:
         item.embedding
         for item in sorted(response.data, key=lambda item: item.index)
     ]
+
+
+def create_apod_embedding(apod: SourceApod) -> list[float]:
+    text = build_embedding_text(apod.title, apod.explanation, apod.credit)
+    return create_embeddings([text])[0]
+
+
+def encode_embedding(embedding: list[float]) -> bytes:
+    if len(embedding) != EMBEDDING_DIMENSIONS:
+        raise ValueError(
+            f"expected {EMBEDDING_DIMENSIONS} dimensions, got {len(embedding)}"
+        )
+    values = array("f", embedding)
+    if sys.byteorder != "little":
+        values.byteswap()
+    return values.tobytes()

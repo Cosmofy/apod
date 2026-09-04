@@ -1,17 +1,14 @@
 import argparse
 import sqlite3
-import sys
-from array import array
 from dataclasses import dataclass
 from pathlib import Path
 
-from app.embeddings import build_embedding_text, clean_text, create_embeddings
+from app.embeddings import EMBEDDING_DIMENSIONS, build_embedding_text, clean_text, create_embeddings, encode_embedding
 from app.source import SourceApod, load_source_apod
 
 
 DEFAULT_DATASET = Path("data/apod-api/extractor/extractedDailyData")
 DEFAULT_DATABASE = Path("data/apod-local.db")
-EMBEDDING_DIMENSIONS = 3072
 
 
 @dataclass
@@ -58,17 +55,6 @@ def open_database(path: Path) -> sqlite3.Connection:
         """
     )
     return connection
-
-
-def encode_embedding(embedding: list[float]) -> bytes:
-    if len(embedding) != EMBEDDING_DIMENSIONS:
-        raise ValueError(
-            f"expected {EMBEDDING_DIMENSIONS} dimensions, got {len(embedding)}"
-        )
-    values = array("f", embedding)
-    if sys.byteorder != "little":
-        values.byteswap()
-    return values.tobytes()
 
 
 def write_batch(

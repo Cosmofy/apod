@@ -7,11 +7,11 @@ from pydantic import BaseModel, ConfigDict
 class SourceApod(BaseModel):
     model_config = ConfigDict(extra="ignore")
     date: date
-    title: str = ""
-    explanation: str = ""
-    hdurl: str | None = None
-    media_type: str | None = None
-    url: str | None = None
+    title: str
+    explanation: str
+    hdurl: str | None = None # possible none
+    media_type: str
+    url: str = ""
     credit: str | None = None
     copyright: str | None = None
 

@@ -1,4 +1,4 @@
-from fastapi import FastAPI, Request
+from fastapi import Request
 from fastapi.responses import JSONResponse
 from enum import Enum
 
@@ -11,6 +11,7 @@ class Code(Enum):
     NASA_RATE_LIMITED = (503, "NASA's Astronomy Picture of the Day server is temporarily busy. Please try again later.")
     INVALID_NASA_RESPONSE = (502, "NASA returned an invalid Astronomy Picture of the Day response.")
     INTERNAL_ERROR = (500, "An unexpected error occurred.")
+    APOD_REQUEST_IN_PROGRESS = (503, "The requested Astronomy Picture of the Day is currently being retrieved. Please try again shortly.")
 
     def __init__(self, status: int, message: str):
         self.status = status
@@ -21,13 +22,11 @@ class Error(Exception):
         self.code = code
         super().__init__(code.name) # exmaple DATE_TOO_EARLY
 
-def register_error_handler(app: FastAPI) -> None:
-    @app.exception_handler(Error)
-    async def handle_error(_request: Request, _error: Error) -> JSONResponse:
-        return JSONResponse(status_code=_error.code.status, content=
-        {
-            "error": {
-                "code": _error.code.name,
-                "message": _error.code.message
-            }
-        })
+async def handle_error(_request: Request, _error: Error) -> JSONResponse:
+    return JSONResponse(status_code=_error.code.status, content=
+    {
+        "error": {
+            "code": _error.code.name,
+            "message": _error.code.message
+        }
+    })
