@@ -41,6 +41,10 @@ def create_apod_embedding(apod: SourceApod) -> list[float]:
     return create_embeddings([text])[0]
 
 
+def create_query_embedding(query: str) -> list[float]:
+    return create_embeddings([clean_text(query)])[0]
+
+
 def encode_embedding(embedding: list[float]) -> bytes:
     if len(embedding) != EMBEDDING_DIMENSIONS:
         raise ValueError(

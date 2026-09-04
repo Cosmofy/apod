@@ -1,0 +1,5 @@
+apod.api.cosmofy.services.deployim.com {
+    tls /etc/caddy/certs/apod.api.cosmofy.services.deployim.com.crt /etc/caddy/certs/apod.api.cosmofy.services.deployim.com.key
+    encode gzip zstd
+    reverse_proxy 127.0.0.1:29401
+}

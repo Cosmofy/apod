@@ -7,6 +7,7 @@ from app.errors import Error, handle_error
 from app.config import Settings
 from app.observability import configure_logging, log_requests
 from app.routers import apod, health, vector
+from app.telemetry import configure_telemetry
 
 OPENAPI_TAGS = [
     {
@@ -31,7 +32,6 @@ async def lifespan(app: FastAPI):
         app.state.http_client = http_client
         app.state.redis_client = redis_client
         yield
-        print("should never print - app is stopped at this point")
 
 
 # app creation and startup
@@ -46,6 +46,7 @@ app = FastAPI(
     contact={"name": "Cosmofy", "url": "https://github.com/Cosmofy"},
     license_info={"name": "Proprietary"},
 )
+configure_telemetry(app)
 app.middleware("http")(log_requests)
 app.add_exception_handler(Error, handle_error)
 app.include_router(health.router)

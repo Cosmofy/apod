@@ -5,4 +5,11 @@ CREATE TABLE IF NOT EXISTS apod_embeddings (
 );
 
 CREATE INDEX IF NOT EXISTS apod_embeddings_vector_idx
-ON apod_embeddings(libsql_vector_idx(embedding));
+ON apod_embeddings(
+    libsql_vector_idx(
+        embedding,
+        'metric=cosine',
+        'max_neighbors=32',
+        'compress_neighbors=float8'
+    )
+);

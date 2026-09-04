@@ -12,6 +12,8 @@ class Code(Enum):
     INVALID_NASA_RESPONSE = (502, "NASA returned an invalid Astronomy Picture of the Day response.")
     INTERNAL_ERROR = (500, "An unexpected error occurred.")
     APOD_REQUEST_IN_PROGRESS = (503, "The requested Astronomy Picture of the Day is currently being retrieved. Please try again shortly.")
+    INVALID_SEARCH_QUERY = (422, "Search must contain between 1 and 200 searchable characters.")
+    SEARCH_UNAVAILABLE = (503, "Astronomy Picture of the Day search is temporarily unavailable.")
 
     def __init__(self, status: int, message: str):
         self.status = status

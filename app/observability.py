@@ -7,6 +7,7 @@ from time import perf_counter
 from uuid import uuid4
 
 from fastapi import Request, Response
+from opentelemetry import trace
 from starlette.middleware.base import RequestResponseEndpoint
 
 
@@ -41,6 +42,12 @@ class JsonFormatter(logging.Formatter):
                 payload[field] = getattr(record, field)
         if "request_id" not in payload and (request_id := request_id_context.get()) is not None:
             payload["request_id"] = request_id
+
+        span_context = trace.get_current_span().get_span_context()
+        if span_context.is_valid:
+            payload["trace_id"] = format(span_context.trace_id, "032x")
+            payload["span_id"] = format(span_context.span_id, "016x")
+
         if record.exc_info:
             payload["exception"] = self.formatException(record.exc_info)
         return json.dumps(payload, default=str, separators=(",", ":"))

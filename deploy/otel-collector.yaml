@@ -1,0 +1,94 @@
+extensions:
+  health_check:
+    endpoint: 127.0.0.1:13133
+  file_storage:
+    directory: /var/lib/otelcol-contrib/storage
+
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 127.0.0.1:4317
+      http:
+        endpoint: 127.0.0.1:4318
+  journald/apod:
+    start_at: end
+    units:
+      - cosmofy-apod.service
+    priority: info
+    storage: file_storage
+    retry_on_failure:
+      enabled: true
+
+processors:
+  memory_limiter:
+    check_interval: 1s
+    limit_mib: 128
+    spike_limit_mib: 32
+  resource/apod:
+    attributes:
+      - key: service.name
+        value: apod
+        action: upsert
+      - key: service.namespace
+        value: cosmofy
+        action: upsert
+      - key: service.instance.id
+        value: ${env:OTEL_NODE_NAME}
+        action: upsert
+      - key: deployment.environment.name
+        value: production
+        action: upsert
+      - key: deployment.platform
+        value: oracle-cloud
+        action: upsert
+  batch:
+    send_batch_size: 512
+    timeout: 5s
+
+exporters:
+  awsxray:
+    region: eu-west-2
+    local_mode: true
+    max_retries: 3
+    request_timeout_seconds: 10
+    aws_log_groups:
+      - /cosmofy/apod/production
+    indexed_attributes:
+      - http.route
+      - http.response.status_code
+      - apod.result.source
+      - apod.search.mode
+  awscloudwatchlogs:
+    region: eu-west-2
+    log_group_name: /cosmofy/apod/production
+    log_stream_name: '{InstanceId}'
+    raw_log: true
+    sending_queue:
+      enabled: true
+      num_consumers: 2
+      queue_size: 1000
+
+service:
+  extensions:
+    - health_check
+    - file_storage
+  pipelines:
+    traces:
+      receivers:
+        - otlp
+      processors:
+        - memory_limiter
+        - resource/apod
+        - batch
+      exporters:
+        - awsxray
+    logs:
+      receivers:
+        - journald/apod
+      processors:
+        - memory_limiter
+        - resource/apod
+        - batch
+      exporters:
+        - awscloudwatchlogs
