@@ -92,7 +92,7 @@ jobs:
               sudo systemctl enable cosmofy-apod.service
               sudo systemctl enable otelcol-contrib.service
               sudo systemctl restart otelcol-contrib.service
-              for attempt in $(seq 1 30); do
+              for attempt in \$(seq 1 30); do
                 if curl -fsS --max-time 5 'http://127.0.0.1:13133/' >/dev/null; then
                   break
                 fi
