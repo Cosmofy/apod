@@ -42,6 +42,9 @@ processors:
       - key: service.instance.id
         value: ${env:OTEL_NODE_NAME}
         action: upsert
+      - key: host.name
+        value: ${env:OTEL_NODE_NAME}
+        action: upsert
       - key: deployment.environment.name
         value: production
         action: upsert
@@ -72,8 +75,22 @@ exporters:
     raw_log: true
     sending_queue:
       enabled: true
+      storage: file_storage
       num_consumers: 2
       queue_size: 1000
+    retry_on_failure:
+      enabled: true
+      max_elapsed_time: 300s
+  otlphttp/loki:
+    endpoint: http://100.104.171.25:3100/otlp
+    sending_queue:
+      enabled: true
+      storage: file_storage
+      num_consumers: 1
+      queue_size: 256
+    retry_on_failure:
+      enabled: true
+      max_elapsed_time: 300s
 
 service:
   extensions:
@@ -90,12 +107,17 @@ service:
       exporters:
         - awsxray
     logs:
-      receivers:
+      receivers: &apod_log_receivers
         - journald/apod
-      processors:
+      processors: &apod_log_processors
         - memory_limiter
         - transform/apod_logs
         - resource/apod
         - batch
       exporters:
         - awscloudwatchlogs
+    logs/loki:
+      receivers: *apod_log_receivers
+      processors: *apod_log_processors
+      exporters:
+        - otlphttp/loki
