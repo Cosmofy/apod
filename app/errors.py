@@ -14,6 +14,8 @@ class Code(Enum):
     APOD_REQUEST_IN_PROGRESS = (503, "The requested Astronomy Picture of the Day is currently being retrieved. Please try again shortly.")
     INVALID_SEARCH_QUERY = (422, "Search must contain between 1 and 200 searchable characters.")
     SEARCH_UNAVAILABLE = (503, "Astronomy Picture of the Day search is temporarily unavailable.")
+    INVALID_SIMILARITY_REQUEST = (422, "Similarity limit must be an integer between 1 and 50.")
+    SIMILARITY_UNAVAILABLE = (503, "Astronomy Picture of the Day similarity is temporarily unavailable.")
 
     def __init__(self, status: int, message: str):
         self.status = status

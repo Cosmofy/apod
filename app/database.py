@@ -8,6 +8,7 @@ from turso_serverless import Connection
 
 from app.config import Settings
 from app.embeddings import encode_embedding
+from app.errors import Code, Error
 from app.source import SourceApod
 
 tracer = trace.get_tracer(__name__)
@@ -207,6 +208,57 @@ def search_vector_apods(
                     apod=source_apod_from_row(row),
                     metric=float(row[8]),
                 )
+                for row in rows
+            ]
+        finally:
+            connection.close()
+
+
+def find_similar_database_apods(
+    apod_date: date,
+    limit: int,
+) -> list[DatabaseSearchMatch]:
+    """Read the source vector and its neighbors without generating embeddings."""
+    with tracer.start_as_current_span(
+        "turso.apod.similar",
+        kind=SpanKind.CLIENT,
+        attributes=database_span_attributes("SELECT", "apod_embeddings"),
+    ) as span:
+        connection = connect_database()
+        try:
+            source = connection.execute(
+                """
+                SELECT embedding.embedding
+                FROM apods AS a
+                LEFT JOIN apod_embeddings AS embedding
+                  ON embedding.apod_date = a.date
+                WHERE a.date = ?
+                """,
+                (apod_date.isoformat(),),
+            ).fetchone()
+            if source is None:
+                raise Error(Code.NOT_FOUND)
+            if source[0] is None:
+                raise Error(Code.SIMILARITY_UNAVAILABLE)
+
+            # Ask for one extra candidate because the index can include the source.
+            rows = connection.execute(
+                """
+                SELECT a.date, a.title, a.explanation, a.media_url,
+                       a.hd_media_url, a.media_type, a.credit, a.copyright,
+                       vector_distance_cos(embedding.embedding, ?) AS distance
+                FROM vector_top_k('apod_embeddings_vector_idx', ?, ?) AS matches
+                JOIN apod_embeddings AS embedding ON embedding.rowid = matches.id
+                JOIN apods AS a ON a.date = embedding.apod_date
+                WHERE a.date != ?
+                ORDER BY distance ASC, a.date DESC
+                LIMIT ?
+                """,
+                (source[0], source[0], limit + 1, apod_date.isoformat(), limit),
+            ).fetchall()
+            span.set_attribute("db.response.returned_rows", len(rows))
+            return [
+                DatabaseSearchMatch(apod=source_apod_from_row(row), metric=float(row[8]))
                 for row in rows
             ]
         finally:
