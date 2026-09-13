@@ -8,6 +8,6 @@ def test_health_live() -> None:
     assert response.status_code == 200
     assert response.json() == {
         "status": "ok",
-        "app": "Cosmofy APOD API",
+        "app": "Cosmofy Pictures API",
         "version": "1.0.0",
     }

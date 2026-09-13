@@ -1,6 +1,14 @@
-# apod
+# pictures
 
-astronomy picture of the day microservice for Cosmofy app
+Cosmofy's picture microservice. It serves NASA Astronomy Picture of the Day,
+APOD discovery/similarity, and the current NASA Earth Observatory Image of the Day.
+
+## endpoints
+
+- `GET /apod?date=YYYY-MM-DD` — Astronomy Picture of the Day.
+- `GET /earth-observatory` — current Earth Observatory Image of the Day.
+- `GET /vector/search?q=...` — APOD hybrid search.
+- `GET /vector/similar?date=YYYY-MM-DD&limit=10` — APOD date similarity.
 
 ## date-based similarity
 

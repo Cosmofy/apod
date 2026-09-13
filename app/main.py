@@ -41,12 +41,12 @@ async def lifespan(app: FastAPI):
 # app creation and startup
 app = FastAPI(
     lifespan=lifespan, # opens shared clients at startup and closes them at shutdown
-    title="Cosmofy APOD API",
-    summary="Retrieve and store NASA's Astronomy Picture of the Day.", # short explanation displayed near the API title
-    description="Provides exact-date APOD retrieval with Redis caching and Turso persistence.", # longer explanation displayed on the documentation page
+    title="Cosmofy Pictures API",
+    summary="Retrieve Cosmofy's NASA astronomy and Earth Observatory pictures.",
+    description="Provides APOD retrieval, discovery, and the current Earth Observatory Image of the Day.",
     version="1.0.0",
     openapi_tags=OPENAPI_TAGS, # describes and orders endpoint groups in the documentation
-    terms_of_service="https://github.com/Cosmofy/apod",
+    terms_of_service="https://github.com/Cosmofy/pictures",
     contact={"name": "Cosmofy", "url": "https://github.com/Cosmofy"},
     license_info={"name": "Proprietary"},
 )

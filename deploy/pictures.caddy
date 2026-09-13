@@ -1,0 +1,7 @@
+# Canonical Pictures hostname. Install only after Spaceship DNS points this name
+# at the Caddy host and its Let's Encrypt certificate has been issued.
+pictures.api.cosmofy.services.deployim.com {
+    tls /etc/caddy/certs/pictures.api.cosmofy.services.deployim.com.crt /etc/caddy/certs/pictures.api.cosmofy.services.deployim.com.key
+    encode gzip zstd
+    reverse_proxy 127.0.0.1:29401
+}
