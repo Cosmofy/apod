@@ -84,7 +84,7 @@ def get_earth_observatory_picture(picture_date: date) -> EarthObservatoryPicture
         connection = connect_database()
         try:
             row = connection.execute(
-                """SELECT date, title, explanation, media_url, url_fallback, credit, copyright,
+                """SELECT date, title, explanation, media_type, media_url, url_fallback, credit, copyright,
                           article_url, image_date, location_name, latitude, longitude
                    FROM earth_observatory_pictures WHERE date = ?""",
                 (picture_date.isoformat(),),
@@ -93,9 +93,9 @@ def get_earth_observatory_picture(picture_date: date) -> EarthObservatoryPicture
             if not row:
                 return None
             return EarthObservatoryPicture(
-                date=row[0], title=row[1], explanation=row[2], url=row[3], url_fallback=row[4],
-                credit=row[5], copyright=row[6], article_url=row[7], image_date=row[8],
-                location_name=row[9], latitude=row[10], longitude=row[11],
+                date=row[0], title=row[1], explanation=row[2], media_type=row[3], url=row[4], url_fallback=row[5],
+                credit=row[6], copyright=row[7], article_url=row[8], image_date=row[9],
+                location_name=row[10], latitude=row[11], longitude=row[12],
             )
         finally:
             connection.close()
@@ -110,14 +110,14 @@ def save_earth_observatory_picture(picture: EarthObservatoryPicture) -> None:
         try:
             connection.execute(
                 """INSERT INTO earth_observatory_pictures
-                   (date,title,explanation,media_url,url_fallback,credit,copyright,article_url,image_date,location_name,latitude,longitude)
-                   VALUES (?,?,?,?,?,?,?,?,?,?,?,?)
+                   (date,title,explanation,media_type,media_url,url_fallback,credit,copyright,article_url,image_date,location_name,latitude,longitude)
+                   VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)
                    ON CONFLICT(date) DO UPDATE SET
-                     title=excluded.title, explanation=excluded.explanation, media_url=excluded.media_url,
+                     title=excluded.title, explanation=excluded.explanation, media_type=excluded.media_type, media_url=excluded.media_url,
                      url_fallback=excluded.url_fallback, credit=excluded.credit, copyright=excluded.copyright,
                      article_url=excluded.article_url, image_date=excluded.image_date,
                      location_name=excluded.location_name, latitude=excluded.latitude, longitude=excluded.longitude""",
-                (picture.date.isoformat(), picture.title, picture.explanation, picture.url,
+                (picture.date.isoformat(), picture.title, picture.explanation, picture.media_type, picture.url,
                  picture.url_fallback, picture.credit, picture.copyright, picture.article_url,
                  picture.image_date.isoformat() if picture.image_date else None, picture.location_name,
                  picture.latitude, picture.longitude),

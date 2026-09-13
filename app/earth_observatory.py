@@ -14,6 +14,7 @@ from app.source import EarthObservatoryPicture
 
 RSS_URL = "https://science.nasa.gov/feed/earth-observatory/image-of-the-day"
 WP_POST_URL = "https://science.nasa.gov/wp-json/wp/v2/posts"
+WP_MEDIA_URL = "https://science.nasa.gov/wp-json/wp/v2/media/{attachment_id}"
 
 
 class _Paragraphs(HTMLParser):
@@ -59,9 +60,54 @@ def _article_body(html: str) -> str:
     return _text(body)
 
 
+def _wordpress_editorial_content(html: str) -> str:
+    """Drop the secondary navigation prepended to migrated WP post content."""
+    navigation_start = html.find('class="hds-secondary-navigation-menu-items"')
+    if navigation_start >= 0:
+        navigation_end = html.find("</nav>", navigation_start)
+        if navigation_end >= 0:
+            html = html[navigation_end + len("</nav>"):]
+    return html.split('class="hds-content-lists-inner', 1)[0]
+
+
 def _first_match(pattern: str, text: str) -> str | None:
     match = re.search(pattern, text, re.IGNORECASE | re.DOTALL)
     return unescape(match.group(1)).strip() if match else None
+
+
+def _media_from_editorial_content(html: str) -> tuple[str, str] | None:
+    """Return the first editorial image or video, never a navigation asset."""
+    video = _first_match(r'<iframe[^>]+src=["\']([^"\']+(?:youtube\.com|youtu\.be)[^"\']*)["\']', html)
+    if video:
+        return "video", video
+    image = _first_match(r'href=["\']([^"\']+_lrg\.(?:jpg|jpeg|png|webp))[^"\']*["\']', html)
+    if image:
+        return "image", image
+    image = _first_match(r'<img[^>]+src=["\']([^"\']+\.(?:jpg|jpeg|png|webp))[^"\']*["\']', html)
+    return ("image", image) if image else None
+
+
+async def _media_from_post(
+    client: httpx.AsyncClient, post: dict, editorial_html: str
+) -> tuple[str, str] | None:
+    """Read editorial media, falling back to the migrated post attachment."""
+    media = _media_from_editorial_content(editorial_html)
+    if media is not None:
+        return media
+
+    metadata = post.get("meta") or {}
+    attachment_ids = str(metadata.get("smd_core_meta_tracked_attachment_ids", "")).split(",")
+    for attachment_id in attachment_ids:
+        attachment_id = attachment_id.strip()
+        if not attachment_id.isdigit():
+            continue
+        response = await client.get(WP_MEDIA_URL.format(attachment_id=attachment_id))
+        response.raise_for_status()
+        attachment = response.json()
+        source_url = attachment.get("source_url")
+        if attachment.get("media_type") == "image" and isinstance(source_url, str):
+            return "image", source_url
+    return None
 
 
 def _parse_image_date(body: str) -> date | None:
@@ -97,17 +143,19 @@ async def fetch_earth_observatory_picture(client: httpx.AsyncClient) -> EarthObs
         if not isinstance(posts, list) or len(posts) != 1:
             raise ValueError("article post missing")
         post = posts[0]
-        article_response = await client.get(article_url, follow_redirects=True)
-        article_response.raise_for_status()
     except (httpx.HTTPError, ET.ParseError, ValueError, KeyError, TypeError):
         raise Error(Code.EARTH_OBSERVATORY_UNAVAILABLE) from None
 
-    article_html = article_response.text
-    explanation = _article_body(article_html)
-    media_url = _first_match(r'href=["\']([^"\']+_lrg\.(?:jpg|jpeg|png|webp))["\']', article_html)
+    editorial_html = _wordpress_editorial_content(post.get("content", {}).get("rendered", ""))
+    explanation = _text(editorial_html)
+    try:
+        media = await _media_from_post(client, post, editorial_html)
+    except (httpx.HTTPError, KeyError, TypeError):
+        raise Error(Code.EARTH_OBSERVATORY_UNAVAILABLE) from None
     title = _text(post.get("title", {}).get("rendered", ""))
-    if not title or not explanation or not media_url:
+    if not title or not explanation or media is None:
         raise Error(Code.INVALID_EARTH_OBSERVATORY_RESPONSE)
+    media_type, media_url = media
 
     acf = post.get("acf") or {}
     def coordinate(key: str) -> float | None:
@@ -123,8 +171,9 @@ async def fetch_earth_observatory_picture(client: httpx.AsyncClient) -> EarthObs
         date=published_date,
         title=title,
         explanation=explanation,
+        media_type=media_type,
         url=media_url,
-        url_fallback=post.get("featured_image_url"),
+        url_fallback=post.get("featured_image_url") if media_type == "image" else None,
         credit=credit,
         article_url=article_url,
         image_date=_parse_image_date(explanation),

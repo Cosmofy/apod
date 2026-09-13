@@ -29,7 +29,7 @@ class EarthObservatoryPicture(BaseModel):
     date: date
     title: str
     explanation: str
-    media_type: Literal["image"] = "image"
+    media_type: Literal["image", "video"] = "image"
     url: str
     url_fallback: str | None = None
     credit: str | None = None

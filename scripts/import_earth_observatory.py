@@ -11,16 +11,16 @@ import asyncio
 import json
 import re
 from datetime import datetime, timezone
-from html import unescape
 from pathlib import Path
 from typing import Any
 
 import httpx
 
 from app.database import connect_database
-from app.earth_observatory import _article_body, _parse_image_date, _parse_location
+from app.earth_observatory import _media_from_post, _parse_image_date, _parse_location, _text, _wordpress_editorial_content
 
 EXPLORER_URL = "https://science.nasa.gov/earth/earth-observatory/explorer/"
+WP_POST_URL = "https://science.nasa.gov/wp-json/wp/v2/posts"
 PROGRESS_EVERY = 25
 
 
@@ -52,33 +52,32 @@ def load_pins(html: str) -> list[dict[str, Any]]:
     return [unique[day] for day in sorted(unique)]
 
 
-def media_url(article_html: str, featured_image: str | None) -> str | None:
-    match = re.search(r'href=["\']([^"\']+_lrg\.(?:jpg|jpeg|png|webp))["\']', article_html, re.I)
-    # Older migrated EO records have no separate _lrg download. Explorer's
-    # featured image is still a direct NASA image URL and is the best canonical
-    # media source available for those entries.
-    return unescape(match.group(1)) if match else featured_image
-
-
 async def fetch_record(client: httpx.AsyncClient, pin: dict[str, Any], retries: int) -> dict[str, Any]:
     url = pin["permalink"]
     last_error = "unknown error"
     for attempt in range(retries):
         try:
-            response = await client.get(url, follow_redirects=True)
+            slug = url.rstrip("/").split("/")[-1]
+            response = await client.get(WP_POST_URL, params={"slug": slug}, follow_redirects=True)
             response.raise_for_status()
-            explanation = _article_body(response.text)
-            url_primary = media_url(response.text, pin.get("featured_image"))
-            if not explanation or not url_primary:
-                raise ValueError("missing article text or high-resolution image")
+            posts = response.json()
+            if not isinstance(posts, list) or len(posts) != 1:
+                raise ValueError("article post missing")
+            editorial_html = _wordpress_editorial_content(posts[0].get("content", {}).get("rendered", ""))
+            explanation = _text(editorial_html)
+            media = await _media_from_post(client, posts[0], editorial_html)
+            if not explanation or media is None:
+                raise ValueError("missing article text or media")
+            media_type, url_primary = media
             credit_match = re.search(r"(Astronaut photograph.*?)(?:Story by|NASA Earth Observatory/)", explanation, re.I | re.S)
             day = datetime.strptime(pin["published_date"], "%B %d, %Y").date()
             return {
                 "date": day.isoformat(),
                 "title": pin["title"],
                 "explanation": explanation,
+                "media_type": media_type,
                 "media_url": url_primary,
-                "url_fallback": pin.get("featured_image"),
+                "url_fallback": pin.get("featured_image") if media_type == "image" else None,
                 "credit": " ".join(credit_match.group(1).split()) if credit_match else None,
                 "article_url": url,
                 "image_date": _parse_image_date(explanation).isoformat() if _parse_image_date(explanation) else None,
@@ -99,14 +98,14 @@ def save_batch(connection: Any, records: list[dict[str, Any]]) -> None:
         for item in records:
             connection.execute(
                 """INSERT INTO earth_observatory_pictures
-                   (date,title,explanation,media_url,url_fallback,credit,copyright,article_url,image_date,location_name,latitude,longitude)
-                   VALUES (?,?,?,?,?,?,NULL,?,?,?,?,?)
+                   (date,title,explanation,media_type,media_url,url_fallback,credit,copyright,article_url,image_date,location_name,latitude,longitude)
+                   VALUES (?,?,?,?,?,?,?,NULL,?,?,?,?,?)
                    ON CONFLICT(date) DO UPDATE SET
-                     title=excluded.title, explanation=excluded.explanation, media_url=excluded.media_url,
+                     title=excluded.title, explanation=excluded.explanation, media_type=excluded.media_type, media_url=excluded.media_url,
                      url_fallback=excluded.url_fallback, credit=excluded.credit, article_url=excluded.article_url,
                      image_date=excluded.image_date, location_name=excluded.location_name,
                      latitude=excluded.latitude, longitude=excluded.longitude""",
-                (item["date"], item["title"], item["explanation"], item["media_url"], item["url_fallback"],
+                (item["date"], item["title"], item["explanation"], item["media_type"], item["media_url"], item["url_fallback"],
                  item["credit"], item["article_url"], item["image_date"], item["location_name"],
                  item["latitude"], item["longitude"]),
             )
