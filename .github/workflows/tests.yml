@@ -41,13 +41,13 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     concurrency:
-      group: deploy-apod-production
+      group: deploy-pictures-production
       cancel-in-progress: false
     env:
       APP_PATH: /home/ubuntu/services/apod
       APP_PORT: "29401"
       SERVICE: cosmofy-apod
-      PUBLIC_HEALTH_URL: https://apod.api.cosmofy.services.deployim.com/health/ready
+      PUBLIC_HEALTH_URL: https://pictures.api.cosmofy.services.deployim.com/health/ready
 
     steps:
       - name: Check out repository
@@ -84,6 +84,11 @@ jobs:
               cd '$APP_PATH'
               ~/.local/bin/uv sync --locked --no-dev
               sudo install -o root -g root -m 0644 deploy/cosmofy-apod.service /etc/systemd/system/cosmofy-apod.service
+              sudo install -o root -g root -m 0644 deploy/pictures.caddy /etc/caddy/sites/pictures.api.cosmofy.services.deployim.com.caddy
+              sudo test -s /etc/caddy/certs/pictures.api.cosmofy.services.deployim.com.crt
+              sudo test -s /etc/caddy/certs/pictures.api.cosmofy.services.deployim.com.key
+              sudo caddy validate --config /etc/caddy/Caddyfile
+              sudo systemctl reload caddy
               sudo install -o root -g otelcol-contrib -m 0640 deploy/otel-collector.yaml /etc/otelcol-contrib/config.yaml
               sudo install -d -o otelcol-contrib -g otelcol-contrib -m 0750 /var/lib/otelcol-contrib/storage
               sudo install -d -o root -g root -m 0755 /etc/systemd/system/otelcol-contrib.service.d

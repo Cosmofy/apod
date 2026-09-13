@@ -3,7 +3,7 @@
 The APOD service now exposes the current NASA Earth Observatory Image of the Day at:
 
 ```text
-GET https://apod.api.cosmofy.services.deployim.com/earth-observatory
+GET https://pictures.api.cosmofy.services.deployim.com/earth-observatory
 ```
 
 It is a current-item endpoint only. It reads NASA's official EO RSS feed, enriches the feed item from NASA's article and Explorer data, and serves Redis -> Turso -> NASA. It does not perform historical EO import, S3 archival, vector indexing, or scheduled ingestion yet.

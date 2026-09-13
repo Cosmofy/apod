@@ -8,7 +8,7 @@ The APOD microservice now owns media URL selection. Keep consuming its existing 
 - GET /vector/search?q=black%20hole&limit=10
 - GET /vector/similar?date=YYYY-MM-DD&limit=10
 
-Base URL: https://apod.api.cosmofy.services.deployim.com
+Base URL: https://pictures.api.cosmofy.services.deployim.com
 
 The APOD REST contract has exactly two public media fields: `url` and nullable `url_fallback`. `hdurl` is internal NASA-source metadata and is never returned. In GraphQL, expose only `url`; do not expose `hdUrl`, `fallbackUrl`, or a second media field. Apply this to exact APOD, search results, similarity results, and APOD artifacts if they have separate mappings. Do not create a second image lookup call or compute S3 hashes in Java.
 
