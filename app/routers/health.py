@@ -2,7 +2,8 @@ from redis import RedisError
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 from pprint import pprint
-from app.database import connect_database
+from app.config import Settings
+from app.database import connect_database, connect_earth_observatory_database
 import logging
 from turso_serverless import OperationalError
 from asyncio import to_thread
@@ -40,14 +41,14 @@ async def ready(request: Request) -> JSONResponse:
         logger.exception(msg="redis readiness check failed", extra={"dependency": "apod:redis"})
 
     # helper codeblock
-    def check_turso_readiness() -> bool:
+    def check_turso_readiness(connect=connect_database, dependency="apod:turso") -> bool:
         connection = None
         try:
-            connection = connect_database()
+            connection = connect()
             return connection.execute("SELECT 67, 69").fetchone() == (67, 69)
         finally:
             if connection is not None:
-                logger.info(msg="closing turso connection", extra={"dependency": "apod:turso"})
+                logger.info(msg="closing turso connection", extra={"dependency": dependency})
                 connection.close()
 
     try:
@@ -62,7 +63,16 @@ async def ready(request: Request) -> JSONResponse:
         "turso": "ok" if turso_ready else "unavailable",
     }
 
-    if redis_ready and turso_ready:
+    eo_ready = True
+    if Settings().eo_database_url:
+        try:
+            eo_ready = await to_thread(check_turso_readiness, connect_earth_observatory_database, "earth-observatory:turso")
+        except OperationalError:
+            eo_ready = False
+            logger.exception(msg="earth observatory turso readiness check failed", extra={"dependency": "earth-observatory:turso"})
+        dependencies["earth_observatory_turso"] = "ok" if eo_ready else "unavailable"
+
+    if redis_ready and turso_ready and eo_ready:
         return JSONResponse(
             status_code=200,
             content={"status": "ready", "dependencies": dependencies},

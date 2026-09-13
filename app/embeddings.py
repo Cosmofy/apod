@@ -4,7 +4,7 @@ from array import array
 from html import unescape
 from openai import OpenAI
 from app.config import Settings
-from app.source import SourceApod
+from app.source import EarthObservatoryPicture, SourceApod
 
 
 EMBEDDING_DIMENSIONS = 3072
@@ -38,6 +38,11 @@ def create_embeddings(texts: list[str]) -> list[list[float]]:
 
 def create_apod_embedding(apod: SourceApod) -> list[float]:
     text = build_embedding_text(apod.title, apod.explanation, apod.credit)
+    return create_embeddings([text])[0]
+
+
+def create_earth_observatory_embedding(picture: EarthObservatoryPicture) -> list[float]:
+    text = build_embedding_text(picture.title, picture.explanation, picture.credit)
     return create_embeddings([text])[0]
 
 

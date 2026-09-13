@@ -58,7 +58,7 @@ def test_earth_observatory_database_round_trip_preserves_video_media_type(monkey
         def execute(self, statement: str, parameters: tuple[object, ...]) -> Cursor:
             nonlocal stored
             if statement.lstrip().startswith("INSERT"):
-                stored = parameters
+                stored = (*parameters, None)
             return Cursor()
 
         def commit(self) -> None:
@@ -89,6 +89,42 @@ def test_redis_hit_returns_cached_picture(client: TestClient, monkeypatch: pytes
     assert response.json()["source"] == "earth_observatory"
     assert response.json()["latitude"] == 25.6867
     lookup.assert_awaited_once()
+
+
+def test_historical_lookup_reads_turso(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
+    stored = picture()
+    monkeypatch.setattr(router, "get_earth_observatory_picture", Mock(return_value=stored))
+
+    response = client.get("/earth-observatory?date=2026-09-11")
+
+    assert response.status_code == 200
+    assert response.json()["date"] == "2026-09-11"
+
+
+def test_historical_lookup_not_found(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(router, "get_earth_observatory_picture", Mock(return_value=None))
+
+    response = client.get("/earth-observatory?date=2020-01-01")
+
+    assert response.status_code == 404
+    assert response.json()["error"]["code"] == "EARTH_OBSERVATORY_NOT_FOUND"
+
+
+def test_search_earth_observatory_uses_hybrid_when_vectors_available(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
+    lexical = router.EarthObservatorySearchMatch(picture=picture(), score=3.0)
+    semantic_picture = picture().model_copy(update={"date": date(2026, 9, 10), "title": "Semantic clouds"})
+    semantic = router.EarthObservatorySearchMatch(picture=semantic_picture, score=0.1)
+
+    monkeypatch.setattr(router, "search_earth_observatory_pictures", Mock(return_value=[lexical]))
+    monkeypatch.setattr(router, "create_query_embedding", Mock(return_value=[0.1] * 3072))
+    monkeypatch.setattr(router, "search_vector_earth_observatory_pictures", Mock(return_value=[semantic]))
+
+    response = client.get("/earth-observatory/search?q=clouds&limit=2")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["search_mode"] == "hybrid"
+    assert len(body["results"]) == 2
 
 
 def test_fetches_persists_and_caches_on_miss(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:

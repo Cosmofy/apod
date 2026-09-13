@@ -35,6 +35,7 @@ class EarthObservatoryPicture(BaseModel):
     credit: str | None = None
     copyright: str | None = None
     source: Literal["earth_observatory"] = "earth_observatory"
+    s3_object_key: str | None = Field(default=None, exclude=True)
     image_date: date | None = None
     location_name: str | None = None
     latitude: float | None = None

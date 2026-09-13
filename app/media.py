@@ -1,7 +1,7 @@
 """Project verified archive locations onto responses, never onto source records."""
 import re
 
-from app.source import SourceApod
+from app.source import EarthObservatoryPicture, SourceApod
 
 MEDIA_BASE_URL = "https://cosmofy-apod-hd-010025084205-eu-west-2.s3.eu-west-2.amazonaws.com"
 
@@ -28,6 +28,25 @@ def with_media_urls(apod: SourceApod) -> SourceApod:
         fallback = None
 
     return apod.model_copy(update={
+        "url": url,
+        "url_fallback": fallback if fallback != url else None,
+    })
+
+
+def with_earth_observatory_media_urls(picture: EarthObservatoryPicture) -> EarthObservatoryPicture:
+    key = picture.s3_object_key
+    verified_archive = (
+        key
+        and re.fullmatch(r"eo/(image|video)/[0-9a-f]{64}\.[a-z0-9]+", key)
+        and key.startswith(f"eo/{picture.media_type}/")
+    )
+
+    if not verified_archive:
+        return picture
+
+    url = f"{MEDIA_BASE_URL}/{key}"
+    fallback = picture.url or picture.url_fallback
+    return picture.model_copy(update={
         "url": url,
         "url_fallback": fallback if fallback != url else None,
     })

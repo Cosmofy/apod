@@ -19,6 +19,8 @@ class Code(Enum):
     EARTH_OBSERVATORY_UNAVAILABLE = (502, "NASA Earth Observatory is temporarily unavailable.")
     INVALID_EARTH_OBSERVATORY_RESPONSE = (502, "NASA Earth Observatory returned an invalid Image of the Day response.")
     EARTH_OBSERVATORY_REQUEST_IN_PROGRESS = (503, "The Earth Observatory image is currently being retrieved. Please try again shortly.")
+    EARTH_OBSERVATORY_NOT_FOUND = (404, "No Earth Observatory Image of the Day was found for the requested date.")
+    EARTH_OBSERVATORY_SEARCH_UNAVAILABLE = (503, "Earth Observatory search is temporarily unavailable.")
 
     def __init__(self, status: int, message: str):
         self.status = status

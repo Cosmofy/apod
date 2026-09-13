@@ -3,7 +3,7 @@ from datetime import date
 import pytest
 
 from app import embeddings
-from app.source import SourceApod
+from app.source import EarthObservatoryPicture, SourceApod
 
 
 def test_create_one_apod_embedding_uses_its_searchable_text(
@@ -32,6 +32,36 @@ def test_create_one_apod_embedding_uses_its_searchable_text(
         "Title: Saturn's Rings\n"
         "Explanation: A view of Saturn.\n"
         "Credit: Example Observatory"
+    ]
+
+
+def test_create_one_earth_observatory_embedding_uses_same_searchable_text(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    captured: list[str] = []
+
+    def fake_create_embeddings(texts: list[str]) -> list[list[float]]:
+        captured.extend(texts)
+        return [[0.5] * embeddings.EMBEDDING_DIMENSIONS]
+
+    monkeypatch.setattr(embeddings, "create_embeddings", fake_create_embeddings)
+    picture = EarthObservatoryPicture(
+        date=date(2026, 9, 13),
+        title="Cloud Streets",
+        explanation="<b>Clouds</b> over water.",
+        media_type="image",
+        url="https://example.com/clouds.jpg",
+        credit="NASA Earth Observatory",
+        article_url="https://science.nasa.gov/earth/example",
+    )
+
+    result = embeddings.create_earth_observatory_embedding(picture)
+
+    assert len(result) == embeddings.EMBEDDING_DIMENSIONS
+    assert captured == [
+        "Title: Cloud Streets\n"
+        "Explanation: Clouds over water.\n"
+        "Credit: NASA Earth Observatory"
     ]
 
 
