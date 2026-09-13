@@ -169,6 +169,13 @@ def test_cli_json_and_exit_status(monkeypatch, capsys, passed, exit_code):
     assert json.loads(capsys.readouterr().out) == {"passed": passed}
 
 
+def test_similarity_success_cases_use_selected_archive_fixture():
+    cases = harness.build_cases(["2025-01-02", "2026-09-11"], "2021-04-22", "2025-01-01")
+    similarity = [case for case in cases if case.name in {"eo.similar.default", "eo.similar.limit50"}]
+    assert len(similarity) == 2
+    assert all(case.params["date"] == "2025-01-02" for case in similarity)
+
+
 @pytest.mark.parametrize("extra", [
     ["--base-url", "file:///tmp/test"], ["--base-url", "http://user:secret@node-a"],
     ["--base-url", "http://node-a?secret=1"], ["--base-url", "http://node-a:999999"],

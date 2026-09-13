@@ -195,8 +195,8 @@ def build_cases(image_dates, video_date, apod_date, *, skip_latest=False):
         cases.append(Case("eo.latest", "/earth-observatory"))
     cases.extend([
         Case("eo.search.moon", "/earth-observatory/search", {"q": "moon"}, kind="search"),
-        Case("eo.similar.default", "/earth-observatory/similar", {"date": "2025-01-01"}, kind="similar"),
-        Case("eo.similar.limit50", "/earth-observatory/similar", {"date": "2025-01-01", "limit": 50}, kind="similar", limit=50),
+        Case("eo.similar.default", "/earth-observatory/similar", {"date": image_dates[0]}, kind="similar"),
+        Case("eo.similar.limit50", "/earth-observatory/similar", {"date": image_dates[0], "limit": 50}, kind="similar", limit=50),
         Case("eo.lookup.invalid_date", "/earth-observatory", {"date": "2025-02-30"}, kind="error", status=422, error_code="INVALID_DATE_FORMAT"),
         Case("eo.search.invalid_query", "/earth-observatory/search", {"q": "___!?"}, kind="error", status=422, error_code="INVALID_SEARCH_QUERY"),
         Case("eo.search.missing_query", "/earth-observatory/search", kind="error", status=422),
