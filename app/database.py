@@ -9,7 +9,7 @@ from turso_serverless import Connection
 from app.config import Settings
 from app.embeddings import encode_embedding
 from app.errors import Code, Error
-from app.source import SourceApod
+from app.source import EarthObservatoryPicture, SourceApod
 
 tracer = trace.get_tracer(__name__)
 
@@ -42,11 +42,12 @@ def source_apod_from_row(row: tuple) -> SourceApod:
         date=row[0],
         title=row[1],
         explanation=row[2],
-        url=row[3],
+        url=row[3] or "",
         hdurl=row[4],
         media_type=row[5],
         credit=row[6],
         copyright=row[7],
+        s3_object_key=row[9] if len(row) > 9 else None,
     )
 
 # Own the complete synchronous connection lifecycle so callers can run it safely in one worker thread.
@@ -61,7 +62,7 @@ def get_database_apod(apod_date: date) -> SourceApod | None:
             row = connection.execute(
                 """
                 SELECT date, title, explanation, media_url, hd_media_url,
-                       media_type, credit, copyright
+                       media_type, credit, copyright, NULL, s3_object_key
                 FROM apods
                 WHERE date = ?
                 """,
@@ -71,6 +72,57 @@ def get_database_apod(apod_date: date) -> SourceApod | None:
             if row:
                 return source_apod_from_row(row)
             return None
+        finally:
+            connection.close()
+
+def get_earth_observatory_picture(picture_date: date) -> EarthObservatoryPicture | None:
+    with tracer.start_as_current_span(
+        "turso.earth_observatory.select",
+        kind=SpanKind.CLIENT,
+        attributes=database_span_attributes("SELECT", "earth_observatory_pictures"),
+    ) as span:
+        connection = connect_database()
+        try:
+            row = connection.execute(
+                """SELECT date, title, explanation, media_url, url_fallback, credit, copyright,
+                          article_url, image_date, location_name, latitude, longitude
+                   FROM earth_observatory_pictures WHERE date = ?""",
+                (picture_date.isoformat(),),
+            ).fetchone()
+            span.set_attribute("db.response.returned_rows", 1 if row else 0)
+            if not row:
+                return None
+            return EarthObservatoryPicture(
+                date=row[0], title=row[1], explanation=row[2], url=row[3], url_fallback=row[4],
+                credit=row[5], copyright=row[6], article_url=row[7], image_date=row[8],
+                location_name=row[9], latitude=row[10], longitude=row[11],
+            )
+        finally:
+            connection.close()
+
+def save_earth_observatory_picture(picture: EarthObservatoryPicture) -> None:
+    with tracer.start_as_current_span(
+        "turso.earth_observatory.upsert",
+        kind=SpanKind.CLIENT,
+        attributes=database_span_attributes("INSERT", "earth_observatory_pictures"),
+    ):
+        connection = connect_database()
+        try:
+            connection.execute(
+                """INSERT INTO earth_observatory_pictures
+                   (date,title,explanation,media_url,url_fallback,credit,copyright,article_url,image_date,location_name,latitude,longitude)
+                   VALUES (?,?,?,?,?,?,?,?,?,?,?,?)
+                   ON CONFLICT(date) DO UPDATE SET
+                     title=excluded.title, explanation=excluded.explanation, media_url=excluded.media_url,
+                     url_fallback=excluded.url_fallback, credit=excluded.credit, copyright=excluded.copyright,
+                     article_url=excluded.article_url, image_date=excluded.image_date,
+                     location_name=excluded.location_name, latitude=excluded.latitude, longitude=excluded.longitude""",
+                (picture.date.isoformat(), picture.title, picture.explanation, picture.url,
+                 picture.url_fallback, picture.credit, picture.copyright, picture.article_url,
+                 picture.image_date.isoformat() if picture.image_date else None, picture.location_name,
+                 picture.latitude, picture.longitude),
+            )
+            connection.commit()
         finally:
             connection.close()
 
@@ -96,7 +148,12 @@ def save_database_apod(apod: SourceApod) -> None:
                     hd_media_url = excluded.hd_media_url,
                     media_type = excluded.media_type,
                     credit = excluded.credit,
-                    copyright = excluded.copyright
+                    copyright = excluded.copyright,
+                    s3_object_key = CASE
+                        WHEN apods.hd_media_url IS excluded.hd_media_url
+                         AND apods.media_url IS excluded.media_url
+                         AND apods.media_type IS excluded.media_type
+                        THEN apods.s3_object_key ELSE NULL END
                 """,
                 (
                     apod.date.isoformat(),
@@ -151,7 +208,8 @@ def search_lexical_apods(
                 """
                 SELECT a.date, a.title, a.explanation, a.media_url,
                        a.hd_media_url, a.media_type, a.credit, a.copyright,
-                       bm25(apods_fts, 8.0, 1.0, 3.0) AS lexical_score
+                       bm25(apods_fts, 8.0, 1.0, 3.0) AS lexical_score,
+                       a.s3_object_key
                 FROM apods_fts
                 JOIN apods AS a ON a.rowid = apods_fts.rowid
                 WHERE apods_fts MATCH ?
@@ -188,7 +246,8 @@ def search_vector_apods(
                 """
                 SELECT a.date, a.title, a.explanation, a.media_url,
                        a.hd_media_url, a.media_type, a.credit, a.copyright,
-                       vector_distance_cos(embedding.embedding, ?) AS semantic_distance
+                       vector_distance_cos(embedding.embedding, ?) AS semantic_distance,
+                       a.s3_object_key
                 FROM vector_top_k(
                     'apod_embeddings_vector_idx',
                     ?,
@@ -246,7 +305,8 @@ def find_similar_database_apods(
                 """
                 SELECT a.date, a.title, a.explanation, a.media_url,
                        a.hd_media_url, a.media_type, a.credit, a.copyright,
-                       vector_distance_cos(embedding.embedding, ?) AS distance
+                       vector_distance_cos(embedding.embedding, ?) AS distance,
+                       a.s3_object_key
                 FROM vector_top_k('apod_embeddings_vector_idx', ?, ?) AS matches
                 JOIN apod_embeddings AS embedding ON embedding.rowid = matches.id
                 JOIN apods AS a ON a.date = embedding.apod_date

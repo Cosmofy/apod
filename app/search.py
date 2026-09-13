@@ -17,6 +17,7 @@ from app.database import (
 from app.embeddings import create_query_embedding
 from app.errors import Code, Error
 from app.source import SourceApod
+from app.media import with_media_urls
 
 
 RANK_FUSION_CONSTANT = 60
@@ -87,7 +88,7 @@ def fuse_search_results(
     maximum_score = ordered[0].score if ordered else 1.0
     return [
         ApodSearchResult(
-            **candidate.apod.model_dump(),
+            **with_media_urls(candidate.apod).model_dump(),
             relevance_score=round(candidate.score / maximum_score, 6),
             match_types=sorted(candidate.match_types),
         )

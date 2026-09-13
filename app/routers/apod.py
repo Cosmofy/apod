@@ -13,6 +13,7 @@ from app.embeddings import create_apod_embedding
 from app.errors import Code, Error
 from app.nasa import fetch_apod, resolve_date
 from app.source import SourceApod
+from app.media import with_media_urls
 
 router = APIRouter(prefix="/apod", tags=["apod"])
 logger = logging.getLogger(name=__name__)
@@ -30,7 +31,7 @@ async def get_apod(request: Request, date: str | None = None) -> SourceApod:
         "apod.pipeline",
         attributes={"apod.request.has_explicit_date": date is not None},
     ) as pipeline_span:
-        return await _run_apod_pipeline(request, date, pipeline_span)
+        return with_media_urls(await _run_apod_pipeline(request, date, pipeline_span))
 
 
 async def _run_apod_pipeline(

@@ -16,6 +16,7 @@ from app import database, similarity
 from app.database import DatabaseSearchMatch
 from app.errors import Code, Error, handle_error
 from app.main import app
+from app.media import with_media_urls
 from app.observability import log_requests, request_id_context
 from app.routers import vector
 from app.source import SourceApod
@@ -107,7 +108,7 @@ def test_default_and_boundary_limits(client, monkeypatch, limit):
     query.assert_called_once_with(SOURCE_DATE, limit if limit is not None else 10)
     assert response.json() == {
         "date": "2024-01-01",
-        "results": [{**apod(2).model_dump(mode="json"), "relevance_score": 0.75}],
+        "results": [{**with_media_urls(apod(2)).model_dump(mode="json"), "relevance_score": 0.75}],
     }
 
 
@@ -131,7 +132,8 @@ def test_ranking_excludes_source_deduplicates_dates_and_applies_limit(client, mo
     results = response.json()["results"]
     assert [item["date"] for item in results] == ["2024-01-03", "2024-01-02", "2024-01-05"]
     assert [item["relevance_score"] for item in results] == pytest.approx([0.9, 0.8, 0.7])
-    assert all(set(item) == set(SourceApod.model_fields) | {"relevance_score"} for item in results)
+    public_fields = {name for name, field in SourceApod.model_fields.items() if not field.exclude}
+    assert all(set(item) == public_fields | {"relevance_score"} for item in results)
 
 
 @pytest.mark.parametrize(("distance", "score"), [(-0.000001, 1.0), (0.0, 1.0), (0.25, 0.75), (1.0, 0.0), (1.8, 0.0)])

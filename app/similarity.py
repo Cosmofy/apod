@@ -10,6 +10,7 @@ from turso_serverless import Error as DatabaseError
 from app.database import find_similar_database_apods
 from app.errors import Code, Error
 from app.source import SourceApod
+from app.media import with_media_urls
 
 
 logger = logging.getLogger(__name__)
@@ -43,7 +44,7 @@ async def similar_apods(apod_date: date, limit: int) -> ApodSimilarityResponse:
                 seen.add(match.apod.date)
                 results.append(
                     ApodSimilarityResult(
-                        **match.apod.model_dump(),
+                        **with_media_urls(match.apod).model_dump(),
                         relevance_score=max(0.0, min(1.0, 1.0 - match.metric)),
                     )
                 )

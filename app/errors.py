@@ -16,6 +16,9 @@ class Code(Enum):
     SEARCH_UNAVAILABLE = (503, "Astronomy Picture of the Day search is temporarily unavailable.")
     INVALID_SIMILARITY_REQUEST = (422, "Similarity limit must be an integer between 1 and 50.")
     SIMILARITY_UNAVAILABLE = (503, "Astronomy Picture of the Day similarity is temporarily unavailable.")
+    EARTH_OBSERVATORY_UNAVAILABLE = (502, "NASA Earth Observatory is temporarily unavailable.")
+    INVALID_EARTH_OBSERVATORY_RESPONSE = (502, "NASA Earth Observatory returned an invalid Image of the Day response.")
+    EARTH_OBSERVATORY_REQUEST_IN_PROGRESS = (503, "The Earth Observatory image is currently being retrieved. Please try again shortly.")
 
     def __init__(self, status: int, message: str):
         self.status = status
