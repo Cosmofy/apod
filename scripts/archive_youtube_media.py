@@ -20,6 +20,7 @@ import json
 import os
 from pathlib import Path
 import re
+import shutil
 import subprocess
 import tempfile
 from typing import Any
@@ -32,6 +33,7 @@ from scripts.archive_earth_observatory_media import require_aws_config, signed_h
 YOUTUBE_RE = re.compile(r"(?:https?://)?(?:www\.|m\.)?(?:youtube\.com|youtu\.be)/", re.I)
 MARKER_PREFIX = "cosmofy:youtube:"
 DEFAULT_WORKERS = 1
+DEFAULT_MIN_FREE_BYTES = 1024 * 1024 * 1024
 
 
 @dataclass(frozen=True)
@@ -91,11 +93,22 @@ def select_eo_rows(connection: Any, requested_date: str | None, limit: int | Non
 
 
 def download_video(row: VideoRow, directory: Path) -> tuple[Path, str]:
+    minimum_free = int(os.environ.get("YOUTUBE_ARCHIVE_MIN_FREE_BYTES", DEFAULT_MIN_FREE_BYTES))
+    available = shutil.disk_usage(directory).free - minimum_free
+    if available <= 0:
+        raise RuntimeError(
+            f"insufficient scratch space: reserve={minimum_free} available={shutil.disk_usage(directory).free}"
+        )
+    # yt-dlp applies this per selected stream. Halving the available space leaves
+    # enough headroom for the separately downloaded video and audio streams plus
+    # the merged MKV before TemporaryDirectory removes them.
+    component_limit = max(1, available // 2)
     output = directory / "%(upload_date>%Y-%m-%d)s - %(title).180B [%(id)s].%(ext)s"
     command = [
         os.environ.get("YTDLP_BIN", "yt-dlp"),
         "--force-ipv4", "--continue", "--no-overwrites", "--http-chunk-size", "10M",
         "--extractor-args", "youtube:player_client=default,ios,web",
+        "--max-filesize", str(component_limit),
         "-f", "bv*+ba/b", "--merge-output-format", "mkv",
         "-o", str(output), row.media_url,
     ]
