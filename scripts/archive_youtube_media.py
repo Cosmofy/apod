@@ -99,7 +99,16 @@ def download_video(row: VideoRow, directory: Path) -> tuple[Path, str]:
         "-f", "bv*+ba/b", "--merge-output-format", "mkv",
         "-o", str(output), row.media_url,
     ]
-    subprocess.run(command, check=True, cwd=directory, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+    cookies = os.environ.get("YTDLP_COOKIES")
+    if cookies:
+        command[1:1] = ["--cookies", cookies]
+    proxy = os.environ.get("YTDLP_PROXY")
+    if proxy:
+        command[1:1] = ["--proxy", proxy]
+    completed = subprocess.run(command, check=False, cwd=directory, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+    if completed.returncode:
+        detail = "\n".join(completed.stdout.splitlines()[-12:])
+        raise RuntimeError(f"yt-dlp exited {completed.returncode}: {detail}")
     files = sorted(directory.glob("*.mkv"), key=lambda path: path.stat().st_mtime, reverse=True)
     if not files:
         raise RuntimeError("yt-dlp completed without an MKV output")
