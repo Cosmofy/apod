@@ -201,24 +201,29 @@ def upload_row(row: VideoRow, aws: tuple[str, str, str | None, str, str, str]) -
     }
 
 
-def apply_mapping(connection: Any, result: dict[str, Any]) -> None:
-    if result["source"] == "earth_observatory":
-        connection.execute(
-            """UPDATE earth_observatory_pictures
-               SET explanation=?, media_url=?, url_fallback=?, s3_object_key=?
-               WHERE date=? AND media_type='video' AND s3_object_key IS NULL""",
-            (result["explanation"], result["url"], result["fallback"], result["key"], result["date"]),
-        )
-    else:
-        connection.execute(
-            """UPDATE apods
-               SET explanation=?, media_url=?, hd_media_url=?, s3_object_key=?
-               WHERE date=? AND media_type='video' AND s3_object_key IS NULL""",
-            (result["explanation"], result["url"], result["fallback"], result["key"], result["date"]),
-        )
-    if connection.execute("SELECT changes()").fetchone()[0] != 1:
-        raise RuntimeError(f"mapping was not applied for {result['source']} {result['date']}")
-    connection.commit()
+def apply_mapping(result: dict[str, Any]) -> None:
+    """Use a fresh Turso connection for each mapping after a potentially long download."""
+    connection = connect_earth_observatory_database() if result["source"] == "earth_observatory" else connect_database()
+    try:
+        if result["source"] == "earth_observatory":
+            connection.execute(
+                """UPDATE earth_observatory_pictures
+                   SET explanation=?, media_url=?, url_fallback=?, s3_object_key=?
+                   WHERE date=? AND media_type='video' AND s3_object_key IS NULL""",
+                (result["explanation"], result["url"], result["fallback"], result["key"], result["date"]),
+            )
+        else:
+            connection.execute(
+                """UPDATE apods
+                   SET explanation=?, media_url=?, hd_media_url=?, s3_object_key=?
+                   WHERE date=? AND media_type='video' AND s3_object_key IS NULL""",
+                (result["explanation"], result["url"], result["fallback"], result["key"], result["date"]),
+            )
+        if connection.execute("SELECT changes()").fetchone()[0] != 1:
+            raise RuntimeError(f"mapping was not applied for {result['source']} {result['date']}")
+        connection.commit()
+    finally:
+        connection.close()
 
 
 def main() -> int:
@@ -234,28 +239,28 @@ def main() -> int:
         raise SystemExit("provide --date for the daily worker or --all-pending for a backfill")
 
     aws = require_aws_config()
-    apod_connection = connect_database() if args.source in ("apod", "all") else None
-    eo_connection = connect_earth_observatory_database() if args.source in ("earth-observatory", "all") else None
-    try:
-        rows: list[VideoRow] = []
-        if apod_connection:
+    rows: list[VideoRow] = []
+    if args.source in ("apod", "all"):
+        apod_connection = connect_database()
+        try:
             rows.extend(select_rows(apod_connection, "apod", args.date, args.limit))
-        if eo_connection:
-            rows.extend(select_eo_rows(eo_connection, args.date, args.limit))
-        print(json.dumps({"event": "start", "date": args.date, "rows": len(rows), "timestamp": utc_now()}), flush=True)
-        for index, row in enumerate(rows, 1):
-            try:
-                result = upload_row(row, aws)
-                apply_mapping(eo_connection if row.source == "earth_observatory" else apod_connection, result)
-                print(json.dumps({"event": "uploaded", **{k: result[k] for k in ("source", "date", "key", "bytes")}, "progress": f"{index}/{len(rows)}"}), flush=True)
-            except Exception as exc:  # noqa: BLE001 - continue and report each independent video.
-                print(json.dumps({"event": "failed", "source": row.source, "date": row.date, "error": type(exc).__name__, "detail": str(exc), "progress": f"{index}/{len(rows)}"}), flush=True)
-        return 0
-    finally:
-        if apod_connection:
+        finally:
             apod_connection.close()
-        if eo_connection:
+    if args.source in ("earth-observatory", "all"):
+        eo_connection = connect_earth_observatory_database()
+        try:
+            rows.extend(select_eo_rows(eo_connection, args.date, args.limit))
+        finally:
             eo_connection.close()
+    print(json.dumps({"event": "start", "date": args.date, "rows": len(rows), "timestamp": utc_now()}), flush=True)
+    for index, row in enumerate(rows, 1):
+        try:
+            result = upload_row(row, aws)
+            apply_mapping(result)
+            print(json.dumps({"event": "uploaded", **{k: result[k] for k in ("source", "date", "key", "bytes")}, "progress": f"{index}/{len(rows)}"}), flush=True)
+        except Exception as exc:  # noqa: BLE001 - continue and report each independent video.
+            print(json.dumps({"event": "failed", "source": row.source, "date": row.date, "error": type(exc).__name__, "detail": str(exc), "progress": f"{index}/{len(rows)}"}), flush=True)
+    return 0
 
 
 if __name__ == "__main__":
