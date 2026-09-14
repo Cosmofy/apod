@@ -68,7 +68,7 @@ def select_rows(connection: Any, source: str, requested_date: str | None, limit:
     if limit is not None:
         params.append(limit)
     rows = connection.execute(
-        f"SELECT date,title,media_url,explanation,url_fallback,s3_object_key FROM apods WHERE {where} ORDER BY date{sql_limit}",
+        f"SELECT date,title,media_url,explanation,hd_media_url,s3_object_key FROM apods WHERE {where} ORDER BY date{sql_limit}",
         tuple(params),
     ).fetchall()
     return [VideoRow(source, row[0], row[1], row[2], row[3], row[4], row[5]) for row in rows if canonical_youtube_url(row[2])]
