@@ -155,6 +155,7 @@ def signed_headers(
     key: str,
     payload_hash: str,
     content_type: str,
+    cache_control: str | None = None,
 ) -> dict[str, str]:
     now = datetime.now(UTC)
     amz_date = now.strftime("%Y%m%dT%H%M%SZ")
@@ -167,6 +168,8 @@ def signed_headers(
         "x-amz-content-sha256": payload_hash,
         "x-amz-date": amz_date,
     }
+    if cache_control:
+        headers["cache-control"] = cache_control
     if session_token:
         headers["x-amz-security-token"] = session_token
     signed_header_names = ";".join(sorted(headers))
@@ -224,6 +227,7 @@ def upload_to_s3(
     session_token: str | None,
     region: str,
     bucket: str,
+    cache_control: str | None = None,
 ) -> None:
     payload_hash = hashlib.sha256(data).hexdigest()
     headers = signed_headers(
@@ -235,6 +239,7 @@ def upload_to_s3(
         key=key,
         payload_hash=payload_hash,
         content_type=content_type,
+        cache_control=cache_control,
     )
     request = Request(
         f"https://{bucket}.s3.{region}.amazonaws.com/{quote(key, safe='/')}",

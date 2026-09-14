@@ -12,21 +12,21 @@ Examples:
 from __future__ import annotations
 
 import argparse
-from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
 from datetime import UTC, datetime
 import hashlib
+import http.client
 import json
 import os
 from pathlib import Path
 import re
-import shutil
 import subprocess
 import tempfile
 from typing import Any
+from urllib.parse import quote
 
 from app.database import connect_database, connect_earth_observatory_database
-from scripts.archive_earth_observatory_media import require_aws_config, upload_to_s3
+from scripts.archive_earth_observatory_media import require_aws_config, signed_headers
 
 
 YOUTUBE_RE = re.compile(r"(?:https?://)?(?:www\.|m\.)?(?:youtube\.com|youtu\.be)/", re.I)
@@ -115,6 +115,57 @@ def download_video(row: VideoRow, directory: Path) -> tuple[Path, str]:
     return files[0], row.media_url
 
 
+def hash_file(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as source:
+        while chunk := source.read(1024 * 1024):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def upload_file_to_s3(
+    *,
+    path: Path,
+    key: str,
+    access_key: str,
+    secret_key: str,
+    session_token: str | None,
+    region: str,
+    bucket: str,
+) -> tuple[str, int]:
+    """Upload a video from disk without materializing it in process memory."""
+    byte_count = path.stat().st_size
+    payload_hash = hash_file(path)
+    headers = signed_headers(
+        access_key=access_key,
+        secret_key=secret_key,
+        session_token=session_token,
+        region=region,
+        bucket=bucket,
+        key=key,
+        payload_hash=payload_hash,
+        content_type="video/x-matroska",
+        cache_control="public, max-age=31536000, immutable",
+    )
+    connection = http.client.HTTPSConnection(f"{bucket}.s3.{region}.amazonaws.com", timeout=120)
+    try:
+        connection.putrequest("PUT", "/" + quote(key, safe="/"), skip_host=True, skip_accept_encoding=True)
+        for name, value in headers.items():
+            connection.putheader(name, value)
+        connection.putheader("content-length", str(byte_count))
+        connection.endheaders()
+        with path.open("rb") as source:
+            while chunk := source.read(1024 * 1024):
+                connection.send(chunk)
+        response = connection.getresponse()
+        response.read()
+        if response.status not in (200, 201):
+            raise RuntimeError(f"s3 put returned HTTP {response.status}: {response.reason}")
+    finally:
+        connection.close()
+    return payload_hash, byte_count
+
+
 def upload_row(row: VideoRow, aws: tuple[str, str, str | None, str, str, str]) -> dict[str, Any]:
     access_key, secret_key, session_token, region, bucket, base_url = aws
     source_url = canonical_youtube_url(row.media_url)
@@ -125,16 +176,14 @@ def upload_row(row: VideoRow, aws: tuple[str, str, str | None, str, str, str]) -
     key = f"{prefix}/{digest}.mkv"
     with tempfile.TemporaryDirectory(prefix="cosmofy-youtube-") as temp:
         video_path, _ = download_video(row, Path(temp))
-        data = video_path.read_bytes()
-    upload_to_s3(
-        data=data, content_type="video/x-matroska", key=key,
-        access_key=access_key, secret_key=secret_key, session_token=session_token,
-        region=region, bucket=bucket,
-    )
+        file_hash, byte_count = upload_file_to_s3(
+            path=video_path, key=key, access_key=access_key, secret_key=secret_key,
+            session_token=session_token, region=region, bucket=bucket,
+        )
     return {
         "source": row.source, "date": row.date, "source_url": source_url,
-        "key": key, "url": f"{base_url}/{key}", "sha256": hashlib.sha256(data).hexdigest(),
-        "bytes": len(data), "explanation": marker(row.explanation, source_url),
+        "key": key, "url": f"{base_url}/{key}", "sha256": file_hash,
+        "bytes": byte_count, "explanation": marker(row.explanation, source_url),
         "fallback": row.url_fallback or source_url,
     }
 
