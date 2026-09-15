@@ -3,5 +3,11 @@
 pictures.api.cosmofy.services.deployim.com {
     tls /etc/caddy/certs/pictures.api.cosmofy.services.deployim.com.crt /etc/caddy/certs/pictures.api.cosmofy.services.deployim.com.key
     encode gzip zstd
-    reverse_proxy 127.0.0.1:29401
+    # Renewal is called by the colocated Warmer over loopback, never by the public site.
+    handle /internal/* {
+        respond 404
+    }
+    handle {
+        reverse_proxy 127.0.0.1:29401
+    }
 }

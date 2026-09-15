@@ -260,6 +260,15 @@ def save_database_embedding(apod_date: date, embedding: list[float]) -> None:
             connection.close()
 
 
+def save_apod_archive_key(apod_date: date, object_key: str) -> None:
+    connection = connect_database()
+    try:
+        connection.execute("UPDATE apods SET s3_object_key=? WHERE date=?", (object_key, apod_date.isoformat()))
+        connection.commit()
+    finally:
+        connection.close()
+
+
 def save_earth_observatory_embedding(picture_date: date, embedding: list[float]) -> None:
     encoded_embedding = encode_embedding(embedding)
     with tracer.start_as_current_span(
@@ -280,6 +289,15 @@ def save_earth_observatory_embedding(picture_date: date, embedding: list[float])
             connection.commit()
         finally:
             connection.close()
+
+
+def save_earth_observatory_archive_key(picture_date: date, object_key: str) -> None:
+    connection = connect_earth_observatory_database()
+    try:
+        connection.execute("UPDATE earth_observatory_pictures SET s3_object_key=? WHERE date=?", (object_key, picture_date.isoformat()))
+        connection.commit()
+    finally:
+        connection.close()
 
 
 def search_lexical_apods(

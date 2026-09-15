@@ -1,3 +1,4 @@
+from pydantic import SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 # all environment variables
@@ -10,3 +11,7 @@ class Settings(BaseSettings):
     redis_url: str = "redis://localhost:6379/0" # uses local by default if .env is not set
     openai_api_key: str
     nasa_api_key: str
+    # Private, tailnet-only Slicer archiver. These are intentionally not AWS keys.
+    media_archiver_url: str | None = None
+    media_archiver_api_token: SecretStr | None = None
+    pictures_internal_token: SecretStr | None = None

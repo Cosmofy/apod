@@ -6,7 +6,7 @@ import redis.asyncio as redis
 from app.errors import Error, handle_error
 from app.config import Settings
 from app.observability import configure_logging, log_requests
-from app.routers import apod, earth_observatory, health, vector
+from app.routers import apod, earth_observatory, health, internal, vector
 from app.telemetry import configure_telemetry
 
 OPENAPI_TAGS = [
@@ -57,3 +57,4 @@ app.include_router(health.router)
 app.include_router(apod.router)
 app.include_router(earth_observatory.router)
 app.include_router(vector.router)
+app.include_router(internal.router)
